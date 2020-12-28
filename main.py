@@ -7,10 +7,12 @@ import torch
 from sac import SAC
 from torch.utils.tensorboard import SummaryWriter
 from replay_memory import ReplayMemory
+from load_demonstrations import load_demonstrations
+import apple_gym.env
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="HalfCheetah-v2",
-                    help='Mujoco Gym environment (default: HalfCheetah-v2)')
+parser.add_argument('--env-name', default="ApplePick-v0",
+                    help='Mujoco Gym environment (default: ApplePick-v0)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
 parser.add_argument('--eval', type=bool, default=True,
@@ -44,6 +46,8 @@ parser.add_argument('--replay_size', type=int, default=1000000, metavar='N',
                     help='size of replay buffer (default: 10000000)')
 parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
+parser.add_argument('--demonstrations', default=False, 
+                    help='Load demonstrations from https://github.com/erfanMhi/gym-recording-modified')
 args = parser.parse_args()
 
 # Environment
@@ -63,7 +67,9 @@ writer = SummaryWriter('runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().str
                                                              args.policy, "autotune" if args.automatic_entropy_tuning else ""))
 
 # Memory
-memory = ReplayMemory(args.replay_size, args.seed)
+memory=ReplayMemory(args.replay_size, args.seed)
+if args.demonstrations:
+    load_demonstrations(memory, args.demonstrations)
 
 # Training Loop
 total_numsteps = 0
