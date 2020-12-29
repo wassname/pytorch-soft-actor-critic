@@ -1,5 +1,7 @@
 import random
 import numpy as np
+import pickle
+import os
 
 class ReplayMemory:
     def __init__(self, capacity, seed):
@@ -21,3 +23,17 @@ class ReplayMemory:
 
     def __len__(self):
         return len(self.buffer)
+
+    def save(self, env_name, suffix="", memory_path=None):
+        if not os.path.exists('models/'):
+            os.makedirs('models/')
+
+        if memory_path is None:
+            memory_path = "models/memory_buffer_{}_{}".format(env_name, suffix)
+        print('Saving memory to {}'.format(memory_path))
+        pickle.dump(self.buffer, open(memory_path, 'wb'))
+
+    def load(self, memory_path):
+        print('Loading memory from {}'.format(memory_path))
+        if memory_path is not None:
+            self.buffer = pickle.load(open(memory_path, 'rb'))

@@ -11,7 +11,7 @@ from pathlib import Path
 def load_demonstrations(mem: ReplayMemory, recordings: Path):
     records = get_recordings(str(recordings))
     ends=records["episodes_end_point"]
-    for i in tqdm(range(len(ends))-1, desc='loading demonstrations'):
+    for i in tqdm(range(len(ends)-1), desc='loading demonstrations'):
         a = ends[i]
         b = ends[i+1]
         for s in range(a+1, b):
