@@ -10,6 +10,7 @@ from pathlib import Path
 
 def load_demonstrations(mem: ReplayMemory, recordings: Path):
     records = get_recordings(str(recordings))
+    print('picks in recordings', sum(records['reward']>10))
     ends=records["episodes_end_point"]
     for i in tqdm(range(len(ends)-1), desc='loading demonstrations'):
         a = ends[i]

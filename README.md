@@ -26,6 +26,9 @@ usage: main.py [-h] [--env-name ENV_NAME] [--policy POLICY] [--eval EVAL]
 
 (Note: There is no need for setting Temperature(`--alpha`) if `--automatic_entropy_tuning` is True.)
 
+`make run`
+
+--------------
 #### For SAC
 
 ```

@@ -13,7 +13,7 @@ import pickle
 from tqdm.auto import tqdm
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="ApplePick-v0",
+parser.add_argument('-e', '--env-name', default="ApplePick-v0",
                     help='Mujoco Gym environment (default: ApplePick-v0)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
@@ -28,8 +28,8 @@ parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
 parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
                     help='Temperature parameter α determines the relative importance of the entropy\
                             term against the reward (default: 0.2)')
-parser.add_argument('--automatic_entropy_tuning', type=bool, default=False, metavar='G',
-                    help='Automaically adjust α (default: False)')
+parser.add_argument('--automatic_entropy_tuning', type=bool, default=True, metavar='G',
+                    help='Automaically adjust α (default: True)')
 parser.add_argument('--seed', type=int, default=123456, metavar='N',
                     help='random seed (default: 123456)')
 parser.add_argument('--batch_size', type=int, default=256, metavar='N',
@@ -50,11 +50,15 @@ parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
 parser.add_argument('--demonstrations', default=False, 
                     help='Load demonstrations from https://github.com/erfanMhi/gym-recording-modified')
+parser.add_argument('-l', '--load', default=False, 
+                    help='Load models')
+parser.add_argument('-r', '--render', action="store_true",
+                    help='show')
 args = parser.parse_args()
 
 # Environment
 # env = NormalizedActions(gym.make(args.env_name))
-env = gym.make(args.env_name, render=False)
+env = gym.make(args.env_name, render=args.render)
 env.seed(args.seed)
 env.action_space.seed(args.seed)
 
@@ -64,7 +68,7 @@ np.random.seed(args.seed)
 # Agent
 agent = SAC(env.observation_space.shape[0], env.action_space, args)
 
-#Tesnorboard
+#Tensorboard
 log_name = '{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
                                                              args.policy, "autotune" if args.automatic_entropy_tuning else "")
 writer = SummaryWriter('runs/' + log_name)
@@ -77,8 +81,13 @@ if args.demonstrations:
 def save():
     agent.save_model(args.env_name, "", "models/actor_" + log_name+'.pkl', "models/critic_"+log_name+'.pkl')
     memory.save(args.env_name, "", "models/memory_" + log_name +'.pkl')
-    # agent.load_model("models/actor_" + log_name + '.pkl', "models/critic_" + log_name + '.pkl')
-    # memory.load("models/memory_" + log_name +'.pkl')
+
+def load(log_name):
+    agent.load_model("models/actor_" + log_name + '.pkl', "models/critic_" + log_name + '.pkl')
+    memory.load("models/memory_" + log_name +'.pkl')
+
+if args.load:
+    load(args.load)
 
 # Training Loop
 total_numsteps = 0
@@ -107,15 +116,19 @@ with tqdm(unit='frames') as prog:
                     writer.add_scalar('loss/critic_2', critic_2_loss, updates)
                     writer.add_scalar('loss/policy', policy_loss, updates)
                     writer.add_scalar('loss/entropy_loss', ent_loss, updates)
-                    writer.add_scalar('entropy_temprature/alpha', alpha, updates)
+                    writer.add_scalar('entropy_temperature/alpha', alpha, updates)
                     updates += 1
 
-            next_state, reward, done, _ = env.step(action) # Step
+            next_state, reward, done, info = env.step(action) # Step
             episode_steps += 1
             total_numsteps += 1
             episode_reward += reward
+
             prog.update(1)
             prog.desc = f'er={episode_reward/episode_steps:2.2f}'
+            # for k, v in info.items():
+            #     if len(v) == 1:
+            #         writer.add_scalar('env/'+k, v, episode_steps) 
 
             # Ignore the "done" signal if it comes from hitting the time horizon.
             # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)

@@ -5,14 +5,12 @@ import numpy as np
 import itertools
 import torch
 from sac import SAC
-from torch.utils.tensorboard import SummaryWriter
-from replay_memory import ReplayMemory
-from load_demonstrations import load_demonstrations
+from tqdm.auto import tqdm
 import apple_gym.env
 import pickle
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('--env-name', default="ApplePick-v0",
+parser.add_argument('-e', '--env-name', default="ApplePick-v0",
                     help='Mujoco Gym environment (default: ApplePick-v0)')
 parser.add_argument('--policy', default="Gaussian",
                     help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
@@ -27,8 +25,8 @@ parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
 parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
                     help='Temperature parameter α determines the relative importance of the entropy\
                             term against the reward (default: 0.2)')
-parser.add_argument('--automatic_entropy_tuning', type=bool, default=False, metavar='G',
-                    help='Automaically adjust α (default: False)')
+parser.add_argument('--automatic_entropy_tuning', type=bool, default=True, metavar='G',
+                    help='Automaically adjust α (default: True)')
 parser.add_argument('--seed', type=int, default=123456, metavar='N',
                     help='random seed (default: 123456)')
 parser.add_argument('--batch_size', type=int, default=256, metavar='N',
@@ -49,29 +47,48 @@ parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
 parser.add_argument('--demonstrations', default=False, 
                     help='Load demonstrations from https://github.com/erfanMhi/gym-recording-modified')
+parser.add_argument('-l', '--load', default=False, 
+                    help='Load models')
+parser.add_argument('-r', '--render', action="store_true",
+                    help='show')
+parser.add_argument('--load-actor', type=str, help='e.g. models/actor_2021-01-02_10-26-23_SAC_ApplePick-v0_Gaussian_autotune.pkl')
+parser.add_argument('--load-critic', type=str, help='e.g. models/critic_2021-01-02_10-26-23_SAC_ApplePick-v0_Gaussian_autotune.pkl')
 args = parser.parse_args()
-
-# Environment
-# env = NormalizedActions(gym.make(args.env_name))
-env = gym.make(args.env_name, render=True)
-env.seed(args.seed)
-env.action_space.seed(args.seed)
 
 torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 
+# Environment
+# env = NormalizedActions(gym.make(args.env_name))
+env = gym.make(args.env_name, render=args.render)
+env.seed(args.seed)
+env.action_space.seed(args.seed)
+
+
 # Agent
 agent = SAC(env.observation_space.shape[0], env.action_space, args)
+agent.load_model(args.load_actor, args.load_critic)
 
-#Tesnorboard
-log_name = '{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
-                                                             args.policy, "autotune" if args.automatic_entropy_tuning else "")
-writer = SummaryWriter('runs/' + log_name)
+# Test
+avg_reward = 0.
+episodes = 10
+for _  in tqdm(range(episodes)):
+    state = env.reset()
+    episode_reward = 0
+    done = False
+    while not done:
+        action = agent.select_action(state, evaluate=True)
 
-# Memory
-memory=ReplayMemory(args.replay_size, args.seed)
-if args.demonstrations:
-    load_demonstrations(memory, args.demonstrations)
+        next_state, reward, done, _ = env.step(action)
+        episode_reward += reward
 
-agent.load_model("models/actor_" + log_name + '.pkl', "models/critic_" + log_name + '.pkl')
-memory.load("models/memory_" + log_name +'.pkl')
+
+        state = next_state
+    avg_reward += episode_reward
+avg_reward /= episodes
+
+print("----------------------------------------")
+print("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
+print("----------------------------------------")
+
+env.close()
