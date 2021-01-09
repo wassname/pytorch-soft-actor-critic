@@ -105,7 +105,6 @@ class SAC(object):
 
     # Save model parameters
     def save_model(self, actor_path=None, critic_path=None):
-        print('Saving models to {} and {}'.format(actor_path, critic_path))
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
 

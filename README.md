@@ -1,3 +1,8 @@
+Modified for wassname's apple gym
+
+make run
+make play
+
 ### Description
 ------------
 Reimplementation of [Soft Actor-Critic Algorithms and Applications](https://arxiv.org/pdf/1812.05905.pdf) and a deterministic variant of SAC from [Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement

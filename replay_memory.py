@@ -32,4 +32,6 @@ class ReplayMemory:
     def load(self, memory_path):
         print('Loading memory from {}'.format(memory_path))
         if memory_path is not None:
+            # print(self.buffer[0])
             self.buffer = torch.load(memory_path)
+            self.position = len(self.buffer)

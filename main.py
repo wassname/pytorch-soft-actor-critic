@@ -4,6 +4,7 @@ import gym
 import numpy as np
 import itertools
 from pathlib import Path
+import logging
 import torch
 from sac import SAC
 from torch.utils.tensorboard import SummaryWriter
@@ -13,49 +14,56 @@ import apple_gym.env
 import pickle
 from tqdm.auto import tqdm
 
-parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
-parser.add_argument('-e', '--env-name', default="ApplePick-v0",
-                    help='Mujoco Gym environment (default: ApplePick-v0)')
-parser.add_argument('--policy', default="Gaussian",
-                    help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
-parser.add_argument('--eval', type=bool, default=True,
-                    help='Evaluates a policy a policy every 10 episode (default: True)')
-parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
-                    help='discount factor for reward (default: 0.99)')
-parser.add_argument('--tau', type=float, default=0.005, metavar='G',
-                    help='target smoothing coefficient(τ) (default: 0.005)')
-parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
-                    help='learning rate (default: 0.0003)')
-parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
-                    help='Temperature parameter α determines the relative importance of the entropy\
-                            term against the reward (default: 0.2)')
-parser.add_argument('--automatic_entropy_tuning', type=bool, default=True, metavar='G',
-                    help='Automaically adjust α (default: True)')
-parser.add_argument('--seed', type=int, default=123456, metavar='N',
-                    help='random seed (default: 123456)')
-parser.add_argument('--batch_size', type=int, default=256, metavar='N',
-                    help='batch size (default: 256)')
-parser.add_argument('--num_steps', type=int, default=1000001, metavar='N',
-                    help='maximum number of steps (default: 1000000)')
-parser.add_argument('--hidden_size', type=int, default=256, metavar='N',
-                    help='hidden size (default: 256)')
-parser.add_argument('--updates_per_step', type=int, default=1, metavar='N',
-                    help='model updates per simulator step (default: 1)')
-parser.add_argument('--start_steps', type=int, default=10000, metavar='N',
-                    help='Steps sampling random actions (default: 10000)')
-parser.add_argument('--target_update_interval', type=int, default=1, metavar='N',
-                    help='Value target update per no. of updates per step (default: 1)')
-parser.add_argument('--replay_size', type=int, default=1000000, metavar='N',
-                    help='size of replay buffer (default: 10000000)')
-parser.add_argument('--cuda', action="store_true",
-                    help='run on CUDA (default: False)')
-parser.add_argument('--demonstrations', default=False, 
-                    help='Load demonstrations from https://github.com/erfanMhi/gym-recording-modified')
-parser.add_argument('-l', '--load', default=False, 
-                    help='Load models')
-parser.add_argument('-r', '--render', action="store_true",
-                    help='show')
-args = parser.parse_args()
+def get_args():
+    parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
+    parser.add_argument('-e', '--env-name', default="ApplePick-v0",
+                        help='Mujoco Gym environment (default: ApplePick-v0)')
+    parser.add_argument('--policy', default="Gaussian",
+                        help='Policy Type: Gaussian | Deterministic (default: Gaussian)')
+    parser.add_argument('--eval', type=bool, default=True,
+                        help='Evaluates a policy a policy every 10 episode (default: True)')
+    parser.add_argument('--no-train', dest='train', action='store_false')
+    parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
+                        help='discount factor for reward (default: 0.99)')
+    parser.add_argument('--tau', type=float, default=0.005, metavar='G',
+                        help='target smoothing coefficient(τ) (default: 0.005)')
+    parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
+                        help='learning rate (default: 0.0003)')
+    parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
+                        help='Temperature parameter α determines the relative importance of the entropy\
+                                term against the reward (default: 0.2)')
+    parser.add_argument('--automatic_entropy_tuning', type=bool, default=True, metavar='G',
+                        help='Automaically adjust α (default: True)')
+    parser.add_argument('--seed', type=int, default=123456, metavar='N',
+                        help='random seed (default: 123456)')
+    parser.add_argument('--batch_size', type=int, default=256, metavar='N',
+                        help='batch size (default: 256)')
+    parser.add_argument('--num_steps', type=int, default=1000001, metavar='N',
+                        help='maximum number of steps (default: 1000000)')
+    parser.add_argument('--hidden_size', type=int, default=256, metavar='N',
+                        help='hidden size (default: 256)')
+    parser.add_argument('--updates_per_step', type=int, default=1, metavar='N',
+                        help='model updates per simulator step (default: 1)')
+    parser.add_argument('--start_steps', type=int, default=10000, metavar='N',
+                        help='Steps sampling random actions (default: 10000)')
+    parser.add_argument('--target_update_interval', type=int, default=1, metavar='N',
+                        help='Value target update per no. of updates per step (default: 1)')
+    parser.add_argument('--replay_size', type=int, default=1000000, metavar='N',
+                        help='size of replay buffer (default: 10000000)')
+    parser.add_argument('--cuda', action="store_true",
+                        help='run on CUDA (default: False)')
+    parser.add_argument('--demonstrations', default=False, 
+                        help='Load demonstrations from https://github.com/erfanMhi/gym-recording-modified')
+    parser.add_argument('-l', '--load', default=False, 
+                        help='Load models')
+    parser.add_argument('-r', '--render', action="store_true",
+                        help='show')
+    args = parser.parse_args()
+    return args
+
+
+args = get_args()
+print(args)
 
 # Environment
 # env = NormalizedActions(gym.make(args.env_name))
@@ -81,32 +89,42 @@ memory=ReplayMemory(args.replay_size, args.seed)
 
 
 def save(save_dir):
-    save_dir.mkdir(exist_ok=True)
-    agent.save_model(save_dir/'actor.pkl', save_dir/'critic.pkl')
-    memory.save(save_dir/'memory.pkl')
+    try:
+        save_dir.mkdir(exist_ok=True)
+        print(f'Saving to {save_dir}')
+        agent.save_model(save_dir/'actor.pkl', save_dir/'critic.pkl')
+        # memory.save(save_dir / 'memory.pkl')
+    except Exception as e:
+        logging.exception("failed to save")
 
 def load(save_dir):
-    agent.load_model(save_dir/'actor.pkl', save_dir/'critic.pkl')
-    memory.load(save_dir/'memory.pkl')
+    agent.load_model(save_dir / 'actor.pkl', save_dir / 'critic.pkl')
+    # if args.train:
+        # memory.load(save_dir/'memory.pkl')
 
 if args.load:
-    load(args.load)
+    if args.load=='auto':
+        args.load = sorted(Path('models').glob('*/actor*'))[-1].parent
+        print(f'auto loading {args.load}')
+    load(Path(args.load))
+    print(f"memory {len(memory)} after load")
 
 if args.demonstrations:
     load_demonstrations(memory, args.demonstrations)
+    print(f"memory {len(memory)} after demonstrations")
 
 # Training Loop
 total_numsteps = 0
 updates = 0
 
 with tqdm(unit='steps', mininterval=5) as prog:
-    for i_episode in itertools.count(1):
+    for i_episode in itertools.count(0):
         episode_reward = 0
         episode_steps = 0
         done = False
         state = env.reset()
 
-        for i_step in itertools.count(1):
+        while (not done) and args.train:
             if args.start_steps > total_numsteps:
                 action = env.action_space.sample()  # Sample random action
             else:
@@ -134,24 +152,21 @@ with tqdm(unit='steps', mininterval=5) as prog:
 
             # log env stuff
             for k in ['env_reward/apple_pick/tree/min_fruit_dist_reward',
-       'env_reward/apple_pick/tree/gripping_fruit_reward',
-       'env_reward/apple_pick/tree/force_tree_reward',
-       'env_reward/apple_pick/tree/force_fruit_reward']:
-                writer.add_scalar(k, info[k], episode_steps)
+    'env_reward/apple_pick/tree/gripping_fruit_reward',
+    'env_reward/apple_pick/tree/force_tree_reward',
+    'env_reward/apple_pick/tree/force_fruit_reward']:
+                writer.add_scalar(k, info[k], total_numsteps)
 
             # Ignore the "done" signal if it comes from hitting the time horizon.  (that is, when it's an artificial terminal signal that isn't based on the agent's state)
             # (https://github.com/openai/spinningup/blob/master/spinup/algos/pytorch/sac/sac.py)
             mask = 1 if episode_steps == env._max_episode_steps else float(not done)
-
-            memory.push(state, action, reward, next_state, mask) # Append transition to memory
+            memory.push(state, action, reward, next_state, mask)  # Append transition to memory
 
             state = next_state
 
-        if total_numsteps > args.num_steps:
-            break
-
         writer.add_scalar('reward/train', episode_reward, i_episode)
-        print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2)))
+        print("\nEpisode: {}, total numsteps: {}, episode steps: {}, reward: {}, updates: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), updates))
+        prog.desc = "e: {}, r: {}, u: {}, m: {}".format(i_episode, round(episode_reward, 2), updates, len(memory))
 
         if i_episode % 10 == 0 and args.eval is True:
             avg_reward = 0.
@@ -179,6 +194,10 @@ with tqdm(unit='steps', mininterval=5) as prog:
             print("----------------------------------------")
             print("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
             print("----------------------------------------")
+
+        if total_numsteps >= args.num_steps:
+            break
+
 
 env.close()
 save(save_dir)
