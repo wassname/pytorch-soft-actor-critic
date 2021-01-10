@@ -13,6 +13,7 @@ from load_demonstrations import load_demonstrations
 import apple_gym.env
 import pickle
 from tqdm.auto import tqdm
+from loguru import logger
 
 def get_args():
     parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
@@ -63,7 +64,7 @@ def get_args():
 
 
 args = get_args()
-print(args)
+logger.info(f'args {args}')
 
 # Environment
 # env = NormalizedActions(gym.make(args.env_name))
@@ -80,7 +81,8 @@ agent = SAC(env.observation_space.shape[0], env.action_space, args)
 #Tensorboard
 log_name = '{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
                                                              args.policy, "autotune" if args.automatic_entropy_tuning else "")
-writer = SummaryWriter('runs/' + log_name)
+writer=SummaryWriter('runs/' + log_name)
+logger.info(f"log name {log_name}")
 
 save_dir=Path("models") / log_name
 
@@ -91,9 +93,9 @@ memory=ReplayMemory(args.replay_size, args.seed)
 def save(save_dir):
     try:
         save_dir.mkdir(exist_ok=True)
-        print(f'Saving to {save_dir}')
+        logger.info(f'Saving to {save_dir}')
         agent.save_model(save_dir/'actor.pkl', save_dir/'critic.pkl')
-        # memory.save(save_dir / 'memory.pkl')
+        # memory.save(save_dir / 'memory.pkl') # crashes at over 200k
     except Exception as e:
         logging.exception("failed to save")
 
@@ -105,13 +107,13 @@ def load(save_dir):
 if args.load:
     if args.load=='auto':
         args.load = sorted(Path('models').glob('*/actor*'))[-1].parent
-        print(f'auto loading {args.load}')
+        logger.info(f'auto loading {args.load}')
     load(Path(args.load))
-    print(f"memory {len(memory)} after load")
+    logger.info(f"memory {len(memory)} after load")
 
 if args.demonstrations:
     load_demonstrations(memory, args.demonstrations)
-    print(f"memory {len(memory)} after demonstrations")
+    logger.info(f"memory {len(memory)} after demonstrations")
 
 # Training Loop
 total_numsteps = 0
@@ -151,10 +153,13 @@ with tqdm(unit='steps', mininterval=5) as prog:
             episode_reward += reward
 
             # log env stuff
+            if total_numsteps == 1:
+                logger.info(f'info {info.keys()}')
+                logger.debug(f'info {info}')
             for k in ['env_reward/apple_pick/tree/min_fruit_dist_reward',
     'env_reward/apple_pick/tree/gripping_fruit_reward',
     'env_reward/apple_pick/tree/force_tree_reward',
-    'env_reward/apple_pick/tree/force_fruit_reward']:
+    'env_reward/apple_pick/tree/force_fruit_reward', 'env_obs/apple_pick/tree/picks']:
                 writer.add_scalar(k, info[k], total_numsteps)
 
             # Ignore the "done" signal if it comes from hitting the time horizon.  (that is, when it's an artificial terminal signal that isn't based on the agent's state)
@@ -165,7 +170,7 @@ with tqdm(unit='steps', mininterval=5) as prog:
             state = next_state
 
         writer.add_scalar('reward/train', episode_reward, i_episode)
-        print("\nEpisode: {}, total numsteps: {}, episode steps: {}, reward: {}, updates: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), updates))
+        logger.info("\nEpisode: {}, total numsteps: {}, episode steps: {}, reward: {}, updates: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), updates))
         prog.desc = "e: {}, r: {}, u: {}, m: {}".format(i_episode, round(episode_reward, 2), updates, len(memory))
 
         if i_episode % 10 == 0 and args.eval is True:
@@ -181,6 +186,12 @@ with tqdm(unit='steps', mininterval=5) as prog:
                     next_state, reward, done, _ = env.step(action)
                     episode_reward += reward
 
+                    for k in ['env_reward/apple_pick/tree/min_fruit_dist_reward',
+            'env_reward/apple_pick/tree/gripping_fruit_reward',
+            'env_reward/apple_pick/tree/force_tree_reward',
+            'env_reward/apple_pick/tree/force_fruit_reward', 'env_obs/apple_pick/tree/picks']:
+                        writer.add_scalar('test/' + k, info[k], total_numsteps)
+
 
                     state = next_state
                 avg_reward += episode_reward
@@ -191,9 +202,9 @@ with tqdm(unit='steps', mininterval=5) as prog:
 
             save(save_dir)
 
-            print("----------------------------------------")
-            print("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
-            print("----------------------------------------")
+            logger.info("----------------------------------------")
+            logger.info("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
+            logger.info("----------------------------------------")
 
         if total_numsteps >= args.num_steps:
             break
