@@ -8,11 +8,12 @@ from loguru import logger
 
 
 class SAC(object):
-    def __init__(self, num_inputs, action_space, args):
+    def __init__(self, num_inputs, action_space, args, process_obs=None):
 
         self.gamma = args.gamma
         self.tau = args.tau
         self.alpha = args.alpha
+        self.process_obs = process_obs
 
         self.policy_type = args.policy
         self.target_update_interval = args.target_update_interval
@@ -20,10 +21,10 @@ class SAC(object):
 
         self.device = torch.device("cuda" if args.cuda else "cpu")
 
-        self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(device=self.device)
+        self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size, process_obs).to(device=self.device)
         self.critic_optim = Adam(self.critic.parameters(), lr=args.lr)
 
-        self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(self.device)
+        self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size, process_obs).to(self.device)
         hard_update(self.critic_target, self.critic)
 
         if self.policy_type == "Gaussian":
@@ -33,17 +34,18 @@ class SAC(object):
                 self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.alpha_optim = Adam([self.log_alpha], lr=args.lr)
 
-            self.policy = GaussianPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy = GaussianPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space, process_obs).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
 
         else:
             self.alpha = 0
             self.automatic_entropy_tuning = False
-            self.policy = DeterministicPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy = DeterministicPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space, process_obs).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
 
-    def select_action(self, state, evaluate=False):
-        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
+    def select_action(self, obs, evaluate=False):
+        obs = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
+        state = self.process_obs(obs)
         if evaluate is False:
             action, _, _ = self.policy.sample(state)
         else:
@@ -52,14 +54,17 @@ class SAC(object):
 
     def update_parameters(self, memory, batch_size, updates):
         # Sample a batch from memory
-        state_batch, action_batch, reward_batch, next_state_batch, mask_batch = memory.sample(batch_size=batch_size)
+        obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch = memory.sample(batch_size=batch_size)
 
-        state_batch = torch.FloatTensor(state_batch).to(self.device)
-        next_state_batch = torch.FloatTensor(next_state_batch).to(self.device)
+        obs_batch = torch.FloatTensor(obs_batch).to(self.device)
+        next_obs_batch= torch.FloatTensor(next_obs_batch).to(self.device)
         action_batch = torch.FloatTensor(action_batch).to(self.device)
         reward_batch = torch.FloatTensor(reward_batch).to(self.device).unsqueeze(1)
         mask_batch = torch.FloatTensor(mask_batch).to(self.device).unsqueeze(1)
 
+
+        state_batch = self.process_obs(obs_batch)
+        next_state_batch = self.process_obs(next_obs_batch)
         with torch.no_grad():
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
