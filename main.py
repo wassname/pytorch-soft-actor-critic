@@ -12,11 +12,13 @@ from replay_memory import ReplayMemory
 from load_demonstrations import load_demonstrations
 import apple_gym.env
 import pickle
+from process_obs import ProcessObservation
+# from torchinfo import summary
 from tqdm.auto import tqdm
 
 
 from loguru import logger
-from rich import logger.info
+from rich import print
 from rich.logging import RichHandler
 logging.basicConfig(level=logging.INFO, handlers=[RichHandler(rich_tracebacks=True, markup=True)])
 logger.configure(handlers=[{"sink": RichHandler(markup=True),
@@ -81,13 +83,22 @@ env.action_space.seed(args.seed)
 keys_to_monitor = ['env_reward/apple_pick/tree/min_fruit_dist_reward',
     'env_reward/apple_pick/tree/gripping_fruit_reward',
     'env_reward/apple_pick/tree/force_tree_reward',
-    'env_reward/apple_pick/tree/force_fruit_reward', 'env_obs/apple_pick/tree/picks']:
+    'env_reward/apple_pick/tree/force_fruit_reward', 'env_obs/apple_pick/tree/picks']
 
 torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 
+# A visual network
+observation_space=env.observation_space.shape[0] 
+process_obs=ProcessObservation()
+observation_space=observation_space - process_obs.reduce_action_space
+logger.info(f"process_obs reduces obs_space {env.observation_space.shape[0]}-{process_obs.reduce_action_space}={observation_space}")
+
 # Agent
-agent = SAC(env.observation_space.shape[0], env.action_space, args)
+agent = SAC(observation_space, env.action_space, args, process_obs)
+
+# TODO
+# summary(model, input_size=(batch_size, 1, 28, 28))
 
 #Tensorboard
 log_name = '{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
@@ -132,6 +143,7 @@ updates = 0
 
 with tqdm(unit='steps', mininterval=5) as prog:
     for i_episode in itertools.count(0):
+        print('1')
         episode_reward = 0
         episode_steps = 0
         done = False

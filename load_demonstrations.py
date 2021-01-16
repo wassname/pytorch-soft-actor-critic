@@ -13,7 +13,7 @@ def load_demonstrations(mem: ReplayMemory, recordings: Path):
     records = get_recordings(str(recordings))
     logger.info('picks in recordings', sum(records['reward']>10))
     ends=records["episodes_end_point"]
-    for i in tqdm(range(len(ends)-1), desc='loading demonstrations'):
+    for i in range(len(ends)-1):
         a = ends[i]
         b = ends[i+1]
         for s in range(a+1, b):

@@ -2,7 +2,7 @@ python=/home/wassname/anaconda/envs/diygym3/bin/python
 date=2021-01-03_13-30-07
 LOGURU_LEVEL=INFO
 run:
-	LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 4 --automatic_entropy_tuning
+	LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 4 --automatic_entropy_tuning true
 	# LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 2 --load auto --alpha 0.1 --tau 1 --target_update_interval 1000
 	# LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 2 --load auto --tau 1 --target_update_interval 1000 --policy Deterministic
 	

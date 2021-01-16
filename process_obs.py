@@ -1,4 +1,6 @@
 
+import os
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -42,7 +44,7 @@ class GenerativeResnet3Headless(nn.Module):
         self.res2 = ResidualBlock(channel_size * 4, channel_size * 4)
         self.res3 = ResidualBlock(channel_size * 4, channel_size * 4)
         self.res4 = ResidualBlock(channel_size * 4, channel_size * 4)
-        self.res5 = ResidualBlock(channel_size * 4, channel_size * 4)
+
 
         self.conv4 = nn.ConvTranspose2d(channel_size * 4, channel_size * 2, kernel_size=4, stride=2, padding=1,
                                         output_padding=1)
@@ -65,21 +67,33 @@ class GenerativeResnet3Headless(nn.Module):
         self.dropout_sin = nn.Dropout(p=prob)
         self.dropout_wid = nn.Dropout(p=prob)
 
+        # freeze above params
+        for param in self.parameters():
+            param.requires_grad = False
+        
+        self.res5 = ResidualBlock(channel_size * 4, channel_size * 4)
+
         self.head = nn.Conv2d(64, 4, 1, bias=False)
 
     def forward(self, x_in):
-        x = F.relu(self.bn1(self.conv1(x_in)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = self.res1(x)
-        x = self.res2(x)
-        x = self.res3(x)
-        x = self.res4(x)
+        # Freeze these layers
+        with torch.no_grad():
+            x = F.relu(self.bn1(self.conv1(x_in)))
+            x = F.relu(self.bn2(self.conv2(x)))
+            x = F.relu(self.bn3(self.conv3(x)))
+            x = self.res1(x)
+            x = self.res2(x)
+            x = self.res3(x)
+            x = self.res4(x)
+        
         x = self.res5(x)
 
-        # 1x1 conv to reduce feature state, with random weights
+        # 1x1 conv to reduce feature state, init with random weights
         x = self.head(x)
+        x = F.max_pool2d(x, kernel_size=3, stride=2)
+        x = F.max_pool2d(x, kernel_size=3, stride=2)
 
+        # ignore the old head which made it larger
         # x = F.relu(self.bn4(self.conv4(x)))
         # x = F.relu(self.bn5(self.conv5(x)))
         # x = self.conv6(x)
@@ -96,3 +110,46 @@ class GenerativeResnet3Headless(nn.Module):
         #     width_output = self.width_output(x)
 
         return x
+
+
+class ProcessObservation(nn.Module):
+    def __init__(self, res=(224, 224)):
+        super().__init__()
+        self.res = res
+
+        # Load visual model
+        grconvnet3_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'data/nets/cornell-randsplit-rgbd-grconvnet3-drop1-ch16/epoch_30_iou_0.97.pt'
+        )
+        self.feature_extractor = GenerativeResnet3Headless().eval()
+        self.feature_extractor.load_state_dict(state_dict=torch.load(grconvnet3_path))
+
+        old_img_size = (res[0], res[1], 8)
+        new_img_size = (res[0]//16-1, res[1]//16-1, 8)
+        self.reduce_action_space = int(np.prod(old_img_size) - np.prod(new_img_size))
+    
+    def __call__(self, obs):
+        """
+        Takes in a torch array of observations, processes the images into features.
+
+        This assumes the observations ends in 2 rgbd images with shape (224, 244, 4)
+        """
+        # import pdb; pdb.set_trace()
+        h, w = self.res
+        px = h * w
+        base_rgbd = obs[:, -px * 4:].reshape((-1, h, w, 4))
+        arm_rgbd = obs[:, -px * 8: - px * 4].reshape((-1, h, w, 4))
+        others = obs[:,: - px * 8]
+        bs = obs.shape[0]
+
+        # make a batch
+        x = torch.cat([base_rgbd, arm_rgbd], 0)
+        x = x.permute((0, 3, 1, 2)) # to ((-1, 4, x, y))
+        h = self.feature_extractor(x)
+
+        # undo fake batch
+        base_h, arm_h = h[:bs].reshape((bs, -1)), h[bs:].reshape((bs, -1))
+        # add features together
+        y = torch.cat([others, base_h, arm_h], 1)
+        return y

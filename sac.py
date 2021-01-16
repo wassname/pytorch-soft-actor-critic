@@ -13,18 +13,19 @@ class SAC(object):
         self.gamma = args.gamma
         self.tau = args.tau
         self.alpha = args.alpha
-        self.process_obs = process_obs
+        self.device = torch.device("cuda" if args.cuda else "cpu")
 
         self.policy_type = args.policy
         self.target_update_interval = args.target_update_interval
         self.automatic_entropy_tuning = args.automatic_entropy_tuning
 
-        self.device = torch.device("cuda" if args.cuda else "cpu")
+        self.process_obs = process_obs.to(self.device)
+        self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(device=self.device)
+        self.critic_optim = Adam(
+            list(self.critic.parameters()) + list(process_obs.parameters())
+            , lr=args.lr)
 
-        self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size, process_obs).to(device=self.device)
-        self.critic_optim = Adam(self.critic.parameters(), lr=args.lr)
-
-        self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size, process_obs).to(self.device)
+        self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(self.device)
         hard_update(self.critic_target, self.critic)
 
         if self.policy_type == "Gaussian":
@@ -34,13 +35,15 @@ class SAC(object):
                 self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.alpha_optim = Adam([self.log_alpha], lr=args.lr)
 
-            self.policy = GaussianPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space, process_obs).to(self.device)
-            self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
+            self.policy = GaussianPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy_optim = Adam(
+                list(self.policy.parameters()) + list(process_obs.parameters()),
+                lr=args.lr)
 
         else:
             self.alpha = 0
             self.automatic_entropy_tuning = False
-            self.policy = DeterministicPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space, process_obs).to(self.device)
+            self.policy = DeterministicPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device)
             self.policy_optim = Adam(self.policy.parameters(), lr=args.lr)
 
     def select_action(self, obs, evaluate=False):
@@ -64,8 +67,8 @@ class SAC(object):
 
 
         state_batch = self.process_obs(obs_batch)
-        next_state_batch = self.process_obs(next_obs_batch)
         with torch.no_grad():
+            next_state_batch = self.process_obs(next_obs_batch)
             next_state_action, next_state_log_pi, _ = self.policy.sample(next_state_batch)
             qf1_next_target, qf2_next_target = self.critic_target(next_state_batch, next_state_action)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
@@ -79,6 +82,7 @@ class SAC(object):
         qf_loss.backward()
         self.critic_optim.step()
 
+        state_batch = self.process_obs(obs_batch)
         pi, log_pi, _ = self.policy.sample(state_batch)
 
         qf1_pi, qf2_pi = self.critic(state_batch, pi)
@@ -111,13 +115,13 @@ class SAC(object):
 
     # Save model parameters
     def save_model(self, actor_path=None, critic_path=None):
-        logger.debug(f'saving models to {actor_path} and {critic_path}'))
+        logger.debug(f'saving models to {actor_path} and {critic_path}')
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
 
     # Load model parameters
     def load_model(self, actor_path, critic_path):
-        logger.info(f'Loading models from {actor_path} and {critic_path}'))
+        logger.info(f'Loading models from {actor_path} and {critic_path}')
         if actor_path is not None:
             self.policy.load_state_dict(torch.load(actor_path))
         if critic_path is not None:
