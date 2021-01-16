@@ -1,8 +1,9 @@
 import random
 import numpy as np
 import torch
-import pickle
+import hickle
 import os
+from loguru import logger
 
 class ReplayMemory:
     def __init__(self, capacity, seed):
@@ -26,12 +27,11 @@ class ReplayMemory:
         return len(self.buffer)
 
     def save(self, memory_path=None):
-        print('Saving memory to {}'.format(memory_path))
-        torch.save(self.buffer, memory_path)
+        logger.info(f'Saving memory to {memory_path}')
+        hickle.save(self.buffer, memory_path, compression='gzip', shuffle=True)
 
     def load(self, memory_path):
-        print('Loading memory from {}'.format(memory_path))
+        logger.info('Loading memory from {memory_path}')
         if memory_path is not None:
-            # print(self.buffer[0])
-            self.buffer = torch.load(memory_path)
+            self.buffer = hickle.load(memory_path)
             self.position = len(self.buffer)

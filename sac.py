@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from utils import soft_update, hard_update
 from model import GaussianPolicy, QNetwork, DeterministicPolicy
+from loguru import logger
 
 
 class SAC(object):
@@ -105,12 +106,13 @@ class SAC(object):
 
     # Save model parameters
     def save_model(self, actor_path=None, critic_path=None):
+        logger.debug(f'saving models to {actor_path} and {critic_path}'))
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
 
     # Load model parameters
     def load_model(self, actor_path, critic_path):
-        print('Loading models from {} and {}'.format(actor_path, critic_path))
+        logger.info(f'Loading models from {actor_path} and {critic_path}'))
         if actor_path is not None:
             self.policy.load_state_dict(torch.load(actor_path))
         if critic_path is not None:
