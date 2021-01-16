@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
                         help='Temperature parameter α determines the relative importance of the entropy\
                                 term against the reward (default: 0.2)')
-    parser.add_argument('--automatic_entropy_tuning', type=bool, default=True, metavar='G',
+    parser.add_argument('--automatic_entropy_tuning', type=bool, default=False, metavar='G',
                         help='Automaically adjust α (default: True)')
     parser.add_argument('--seed', type=int, default=123456, metavar='N',
                         help='random seed (default: 123456)')
@@ -200,7 +200,8 @@ with tqdm(unit='steps', mininterval=5) as prog:
 
             writer.add_scalar('avg_reward/test', avg_reward, i_episode)
 
-            save(save_dir)
+            if args.train:
+                save(save_dir)
 
             logger.info("----------------------------------------")
             logger.info("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
@@ -211,4 +212,5 @@ with tqdm(unit='steps', mininterval=5) as prog:
 
 
 env.close()
-save(save_dir)
+# if args.train:
+#     save(save_dir)
