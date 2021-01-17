@@ -12,7 +12,6 @@ from load_demonstrations import load_demonstrations
 import apple_gym.env
 import pickle
 from process_obs import ProcessObservation
-# from torchinfo import summary
 from torch.utils.tensorboard import SummaryWriter
 
 from progress import RichTQDM
@@ -98,8 +97,14 @@ logger.info(f"process_obs reduces obs_space {env.observation_space.shape[0]}-{pr
 # Agent
 agent = SAC(observation_dim, env.action_space, args, process_obs)
 
-# TODO
-# summary(model, input_size=(batch_size, 1, 28, 28))
+# from torchinfo import summary
+# print('process_obs')
+# summary(process_obs, input_size=(2, *env.observation_space.shape), depth=2)
+# print('critic')
+# summary(agent.critic, input_size=((2, observation_dim), (2, action_dim)))
+# print('policy')
+# summary(agent.policy, input_size=(2, observation_dim))
+# # print(process_obs, agent.critic, agent.policy)
 
 #Tensorboard
 log_name = '{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
@@ -117,13 +122,21 @@ def save(save_dir):
     try:
         save_dir.mkdir(exist_ok=True)
         logger.info(f'Saving to {save_dir}')
-        agent.save_model(save_dir/'actor.pkl', save_dir/'critic.pkl')
+        agent.save_model(
+            save_dir / 'actor.pkl',
+            save_dir / 'critic.pkl',
+            save_dir / 'process_obs.pkl'
+            )
         # memory.save(save_dir / 'memory.pkl') # crashes at over 200k
     except Exception as e:
         logging.exception("failed to save")
 
 def load(save_dir):
-    agent.load_model(save_dir / 'actor.pkl', save_dir / 'critic.pkl')
+    agent.load_model(
+        save_dir / 'actor.pkl',
+        save_dir / 'critic.pkl',
+        save_dir / 'process_obs.pkl'
+        )
     # if args.train:
         # memory.load(save_dir/'memory.pkl')
 
@@ -145,10 +158,9 @@ updates = 0
 
 with RichTQDM() as prog:
     task1 = prog.add_task("[red]steps", total=args.num_steps)
-    task2 = prog.add_task("[red]updates", total=args.num_steps)
-    task3 = prog.add_task("[red]test", total=args.num_steps)
+    task2 = prog.add_task("[blue]updates", total=args.num_steps)
+    task3 = prog.add_task("[green]test", total=args.num_steps)
     for i_episode in itertools.count(0):
-        print('1')
         episode_reward = 0
         episode_steps = 0
         done = False
@@ -160,7 +172,7 @@ with RichTQDM() as prog:
             else:
                 action = agent.select_action(state)  # Sample action from policy
 
-            if len(memory) > args.batch_size:
+            if len(memory) > args.batch_size  and (total_numsteps%20==0):
                 # Number of updates per step in environment
                 for i in range(args.updates_per_step):
                     # Update parameters of all the networks

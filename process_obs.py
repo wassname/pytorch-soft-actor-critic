@@ -122,7 +122,7 @@ class ProcessObservation(nn.Module):
             os.path.dirname(os.path.abspath(__file__)),
             'data/nets/cornell-randsplit-rgbd-grconvnet3-drop1-ch16/epoch_30_iou_0.97.pt'
         )
-        self.feature_extractor = GenerativeResnet3Headless().half()
+        self.feature_extractor = GenerativeResnet3Headless().train().half()
         self.feature_extractor.load_state_dict(state_dict=torch.load(grconvnet3_path), strict=False)
 
         old_img_size = (res[0], res[1], 8)
@@ -146,11 +146,11 @@ class ProcessObservation(nn.Module):
         # make a batch
         x = torch.cat([base_rgbd, arm_rgbd], 0)
         x = x.permute((0, 3, 1, 2))  # to ((-1, 4, x, y))
-        x = x.half()
         h = self.feature_extractor(x)
 
         # undo fake batch
         base_h, arm_h = h[:bs].reshape((bs, -1)), h[bs:].reshape((bs, -1))
         # add features together
         y = torch.cat([others, base_h, arm_h], 1)
+        assert torch.isfinite(y).all()
         return y

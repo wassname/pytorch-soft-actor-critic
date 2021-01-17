@@ -14,28 +14,29 @@ class SAC(object):
         self.tau = args.tau
         self.alpha = args.alpha
         self.device = torch.device("cuda" if args.cuda else "cpu")
+        self.dtype = torch.float
 
         self.policy_type = args.policy
         self.target_update_interval = args.target_update_interval
         self.automatic_entropy_tuning = args.automatic_entropy_tuning
 
-        self.process_obs = process_obs.to(self.device)
-        self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(device=self.device)
+        self.process_obs = process_obs.to(self.device).to(self.dtype)
+        self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(device=self.device).to(self.dtype)
         self.critic_optim = Adam(
             list(self.critic.parameters()) + list(process_obs.parameters())
             , lr=args.lr)
 
-        self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(self.device)
+        self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(self.device).to(self.dtype)
         hard_update(self.critic_target, self.critic)
 
         if self.policy_type == "Gaussian":
             # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
             if self.automatic_entropy_tuning is True:
                 self.target_entropy = -torch.prod(torch.Tensor(action_space.shape).to(self.device)).item()
-                self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+                self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device, dtype=self.dtype)
                 self.alpha_optim = Adam([self.log_alpha], lr=args.lr)
 
-            self.policy = GaussianPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy = GaussianPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device).to(self.dtype)
             self.policy_optim = Adam(
                 list(self.policy.parameters()) + list(process_obs.parameters()),
                 lr=args.lr)
@@ -43,14 +44,14 @@ class SAC(object):
         else:
             self.alpha = 0
             self.automatic_entropy_tuning = False
-            self.policy = DeterministicPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device)
+            self.policy = DeterministicPolicy(num_inputs, action_space.shape[0], args.hidden_size, action_space).to(self.device).to(self.dtype)
             self.policy_optim = Adam(
                 list(self.policy.parameters()) + list(process_obs.parameters()),
                 lr=args.lr)
 
     def select_action(self, obs, evaluate=False):
         with torch.no_grad():
-            obs = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
+            obs = torch.FloatTensor(obs).to(self.device).unsqueeze(0).to(self.dtype)
             state = self.process_obs(obs)
             if evaluate is False:
                 action, _, _ = self.policy.sample(state)
@@ -63,11 +64,11 @@ class SAC(object):
         # Sample a batch from memory
         obs_batch, action_batch, reward_batch, next_obs_batch, mask_batch = memory.sample(batch_size=batch_size)
 
-        obs_batch = torch.FloatTensor(obs_batch).to(self.device)
-        next_obs_batch= torch.FloatTensor(next_obs_batch).to(self.device)
-        action_batch = torch.FloatTensor(action_batch).to(self.device)
-        reward_batch = torch.FloatTensor(reward_batch).to(self.device).unsqueeze(1)
-        mask_batch = torch.FloatTensor(mask_batch).to(self.device).unsqueeze(1)
+        obs_batch = torch.FloatTensor(obs_batch).to(self.device).to(self.dtype)
+        next_obs_batch= torch.FloatTensor(next_obs_batch).to(self.device).to(self.dtype)
+        action_batch = torch.FloatTensor(action_batch).to(self.device).to(self.dtype)
+        reward_batch = torch.FloatTensor(reward_batch).to(self.device).unsqueeze(1).to(self.dtype)
+        mask_batch = torch.FloatTensor(mask_batch).to(self.device).unsqueeze(1).to(self.dtype)
 
 
         state_batch = self.process_obs(obs_batch)
@@ -83,6 +84,7 @@ class SAC(object):
         qf_loss = qf1_loss + qf2_loss
 
         self.critic_optim.zero_grad()
+        assert torch.isfinite(qf_loss).all()
         qf_loss.backward()
         self.critic_optim.step()
 
@@ -95,6 +97,7 @@ class SAC(object):
         policy_loss = ((self.alpha * log_pi) - min_qf_pi).mean() # Jπ = 𝔼st∼D,εt∼N[α * logπ(f(εt;st)|st) − Q(st,f(εt;st))]
 
         self.policy_optim.zero_grad()
+        assert torch.isfinite(policy_loss).all()
         policy_loss.backward()
         self.policy_optim.step()
 
@@ -108,7 +111,7 @@ class SAC(object):
             self.alpha = self.log_alpha.exp()
             alpha_tlogs = self.alpha.clone() # For TensorboardX logs
         else:
-            alpha_loss = torch.tensor(0.).to(self.device)
+            alpha_loss = torch.tensor(0.).to(self.device).to(self.dtype)
             alpha_tlogs = torch.tensor(self.alpha) # For TensorboardX logs
 
 
@@ -118,16 +121,19 @@ class SAC(object):
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
     # Save model parameters
-    def save_model(self, actor_path=None, critic_path=None):
-        logger.debug(f'saving models to {actor_path} and {critic_path}')
+    def save_model(self, actor_path=None, critic_path=None, process_obs_path=None):
+        logger.debug(f'saving models to {actor_path} and {critic_path} and {process_obs_path}')
         torch.save(self.policy.state_dict(), actor_path)
         torch.save(self.critic.state_dict(), critic_path)
+        torch.save(self.process_obs.state_dict(), process_obs_path)
 
     # Load model parameters
-    def load_model(self, actor_path, critic_path):
-        logger.info(f'Loading models from {actor_path} and {critic_path}')
+    def load_model(self, actor_path=None, critic_path=None, process_obs_path=None):
+        logger.info(f'Loading models from {actor_path} and {critic_path} and {process_obs_path}')
         if actor_path is not None:
             self.policy.load_state_dict(torch.load(actor_path))
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
+        if process_obs_path is not None:
+            self.process_obs.load_state_dict(torch.load(process_obs_path))
 

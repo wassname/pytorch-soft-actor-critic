@@ -5,7 +5,14 @@ LOGURU_LEVEL=INFO
 run:
 	ulimit -S -m 65000000
 	ulimit -S -v 65000000
-	LOGURU_LEVEL=INFO ${python} main.py  --cuda --automatic_entropy_tuning true --replay_size 50000 --load auto
+	LOGURU_LEVEL=INFO ${python} \
+	-m pdb -c continue \
+	main.py \
+		 --cuda \
+		 --automatic_entropy_tuning true \
+		 --replay_size 10000 \
+		 --demonstrations data/demonstrations \
+		#  --load auto \
 	# ${python} -m pdb main.py  --cuda --automatic_entropy_tuning true --replay_size 10000 --load auto --start_steps 200
 	# LOGURU_LEVEL=INFO ${python} main.py  --demonstrations data/demonstrations --cuda --automatic_entropy_tuning true --replay_size 20000 --load auto
 	# LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 2 --load auto --alpha 0.1 --tau 1 --target_update_interval 1000
