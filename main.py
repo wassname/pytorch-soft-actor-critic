@@ -13,26 +13,12 @@ import apple_gym.env
 import pickle
 from process_obs import ProcessObservation
 # from torchinfo import summary
-from tqdm.auto import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-
+from progress import RichTQDM
 from loguru import logger
 from rich import print
 from rich.logging import RichHandler
-from rich.progress import (
-    ProgressColumn,
-    BarColumn,
-    DownloadColumn,
-    TextColumn,
-    TransferSpeedColumn,
-    TimeRemainingColumn,
-    Progress,
-    TaskID,
-    TimeElapsedColumn,
-    SpinnerColumn,
-    Text
-)
 logging.basicConfig(level=logging.INFO, handlers=[RichHandler(rich_tracebacks=True, markup=True)])
 logger.configure(handlers=[{"sink": RichHandler(markup=True),
                          "format": "{message}"}])
@@ -156,32 +142,11 @@ if args.demonstrations:
 total_numsteps = 0
 updates = 0
 
-class SpeedColumn(ProgressColumn):
-    """Renders human readable transfer speed."""
 
-    def render(self, task: "Task") -> Text:
-        """Show data transfer speed."""
-        speed = task.speed
-        if speed is None:
-            return Text("?", style="progress.data.speed")
-        return Text(f"{speed:2.2f} it/s", style="progress.data.speed")
-
-with Progress(
-    SpinnerColumn(),
-    "[progress.description]{task.description}",
-    BarColumn(),
-    TextColumn("{task.completed}/{task.total}"),
-    "[",
-    TimeElapsedColumn(),
-    "<",
-    TimeRemainingColumn(),
-    ',',
-    SpeedColumn(),
-    ']',
-    refresh_per_second=1, speed_estimate_period=360
-    ) as prog:
+with RichTQDM() as prog:
     task1 = prog.add_task("[red]steps", total=args.num_steps)
     task2 = prog.add_task("[red]updates", total=args.num_steps)
+    task3 = prog.add_task("[red]test", total=args.num_steps)
     for i_episode in itertools.count(0):
         print('1')
         episode_reward = 0
@@ -234,7 +199,7 @@ with Progress(
         logger.info("\nEpisode: {}, total numsteps: {}, episode steps: {}, reward: {}, updates: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), updates))
         prog.desc = "e: {}, r: {}, u: {}, m: {}".format(i_episode, round(episode_reward, 2), updates, len(memory))
 
-        if i_episode % 10 == 0 and args.eval is True:
+        if (i_episode % 100 == 0) and (args.eval is True) and i_episode>0:
             avg_reward = 0.
             episodes = 10
             for _  in range(episodes):
@@ -243,6 +208,7 @@ with Progress(
                 done = False
                 while not done:
                     action = agent.select_action(state, evaluate=True)
+                    prog.update(task3, advance=1)
 
                     next_state, reward, done, _ = env.step(action)
                     episode_reward += reward
@@ -266,7 +232,7 @@ with Progress(
         if total_numsteps >= args.num_steps:
             break
 
-        if args.train:
-            save(save_dir)
+            if args.train:
+                save(save_dir)
 
 env.close()

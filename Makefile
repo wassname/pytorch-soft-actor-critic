@@ -1,11 +1,12 @@
+SHELL=/bin/bash
 python=/home/wassname/anaconda/envs/diygym3/bin/python
-date=2021-01-03_13-30-07
 LOGURU_LEVEL=INFO
-# ulimit -S -m 35000000
-# ulimit -S -v 35000000
 
 run:
-	LOGURU_LEVEL=INFO ${python} -m pdb main.py  --cuda --automatic_entropy_tuning true --replay_size 15000 --load auto
+	ulimit -S -m 65000000
+	ulimit -S -v 65000000
+	LOGURU_LEVEL=INFO ${python} main.py  --cuda --automatic_entropy_tuning true --replay_size 50000 --load auto
+	# ${python} -m pdb main.py  --cuda --automatic_entropy_tuning true --replay_size 10000 --load auto --start_steps 200
 	# LOGURU_LEVEL=INFO ${python} main.py  --demonstrations data/demonstrations --cuda --automatic_entropy_tuning true --replay_size 20000 --load auto
 	# LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 2 --load auto --alpha 0.1 --tau 1 --target_update_interval 1000
 	# LOGURU_LEVEL=INFO ${python} main.py --demonstrations data/demonstrations --cuda --updates_per_step 2 --load auto --tau 1 --target_update_interval 1000 --policy Deterministic

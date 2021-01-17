@@ -21,8 +21,8 @@ def unpack(data):
     return data
 
 
-class ReplayMemory2:
-    def __init__(self, capacity, seed):
+class ReplayMemory:
+    def __init__(self, capacity, seed, *args, **kwargs):
         random.seed(seed)
         self.capacity = capacity
         self.buffer = []
@@ -56,7 +56,7 @@ class ReplayMemory2:
             self.position = len(self.buffer)
 
 
-class ReplayMemory:
+class ReplayMemory2:
     def __init__(self, capacity, seed, observation_dim, action_dim):
         random.seed(seed)
         self.capacity = capacity
