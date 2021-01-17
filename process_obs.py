@@ -113,7 +113,7 @@ class GenerativeResnet3Headless(nn.Module):
 
 
 class ProcessObservation(nn.Module):
-    def __init__(self, res=(224, 224)):
+    def __init__(self, res=(112, 112)):
         super().__init__()
         self.res = res
 
@@ -122,7 +122,7 @@ class ProcessObservation(nn.Module):
             os.path.dirname(os.path.abspath(__file__)),
             'data/nets/cornell-randsplit-rgbd-grconvnet3-drop1-ch16/epoch_30_iou_0.97.pt'
         )
-        self.feature_extractor = GenerativeResnet3Headless().train().half()
+        self.feature_extractor = GenerativeResnet3Headless().train()
         self.feature_extractor.load_state_dict(state_dict=torch.load(grconvnet3_path), strict=False)
 
         old_img_size = (res[0], res[1], 8)

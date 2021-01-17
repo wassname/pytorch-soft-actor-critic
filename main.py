@@ -66,6 +66,8 @@ def get_args():
                         help='Load models')
     parser.add_argument('-r', '--render', action="store_true",
                         help='show')
+    parser.add_argument('-O', '--opt_level', default='O0', 
+                        help='Apex Amp Optimisation level')
     args = parser.parse_args()
     return args
 
@@ -95,16 +97,16 @@ observation_dim=observation_dim - process_obs.reduce_obs_space
 logger.info(f"process_obs reduces obs_space {env.observation_space.shape[0]}-{process_obs.reduce_obs_space}={observation_dim}")
 
 # Agent
-agent = SAC(observation_dim, env.action_space, args, process_obs)
+agent = SAC(observation_dim, env.action_space, args, process_obs, args.opt_level)
 
-# from torchinfo import summary
-# print('process_obs')
-# summary(process_obs, input_size=(2, *env.observation_space.shape), depth=2)
-# print('critic')
-# summary(agent.critic, input_size=((2, observation_dim), (2, action_dim)))
-# print('policy')
-# summary(agent.policy, input_size=(2, observation_dim))
-# # print(process_obs, agent.critic, agent.policy)
+from torchinfo import summary
+print('process_obs')
+summary(process_obs, input_size=(2, *env.observation_space.shape), depth=2)
+print('critic')
+summary(agent.critic, input_size=((2, observation_dim), (2, action_dim)))
+print('policy')
+summary(agent.policy, input_size=(2, observation_dim))
+# print(process_obs, agent.critic, agent.policy)
 
 #Tensorboard
 log_name = '{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
@@ -172,7 +174,7 @@ with RichTQDM() as prog:
             else:
                 action = agent.select_action(state)  # Sample action from policy
 
-            if len(memory) > args.batch_size  and (total_numsteps%20==0):
+            if len(memory) > args.batch_size  and (total_numsteps%1==0):
                 # Number of updates per step in environment
                 for i in range(args.updates_per_step):
                     # Update parameters of all the networks
@@ -211,7 +213,7 @@ with RichTQDM() as prog:
         logger.info("\nEpisode: {}, total numsteps: {}, episode steps: {}, reward: {}, updates: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), updates))
         prog.desc = "e: {}, r: {}, u: {}, m: {}".format(i_episode, round(episode_reward, 2), updates, len(memory))
 
-        if (i_episode % 100 == 0) and (args.eval is True) and i_episode>0:
+        if (i_episode % 10 == 0) and (args.eval is True) and i_episode>0:
             avg_reward = 0.
             episodes = 10
             for _  in range(episodes):
@@ -244,7 +246,7 @@ with RichTQDM() as prog:
         if total_numsteps >= args.num_steps:
             break
 
-            if args.train:
-                save(save_dir)
+        if args.train:
+            save(save_dir)
 
 env.close()

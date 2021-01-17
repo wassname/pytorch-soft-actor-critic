@@ -9,9 +9,10 @@ run:
 	-m pdb -c continue \
 	main.py \
 		 --cuda \
+		 --opt_level O1 \
 		 --automatic_entropy_tuning true \
-		 --replay_size 10000 \
-		 --demonstrations data/demonstrations \
+		 --replay_size 100000 \
+		#  --demonstrations data/demonstrations \
 		#  --load auto \
 	# ${python} -m pdb main.py  --cuda --automatic_entropy_tuning true --replay_size 10000 --load auto --start_steps 200
 	# LOGURU_LEVEL=INFO ${python} main.py  --demonstrations data/demonstrations --cuda --automatic_entropy_tuning true --replay_size 20000 --load auto

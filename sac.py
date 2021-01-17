@@ -5,10 +5,11 @@ from torch.optim import Adam
 from utils import soft_update, hard_update
 from model import GaussianPolicy, QNetwork, DeterministicPolicy
 from loguru import logger
+from apex import amp
 
 
 class SAC(object):
-    def __init__(self, num_inputs, action_space, args, process_obs=None):
+    def __init__(self, num_inputs, action_space, args, process_obs=None, opt_level='O1'):
 
         self.gamma = args.gamma
         self.tau = args.tau
@@ -49,6 +50,12 @@ class SAC(object):
                 list(self.policy.parameters()) + list(process_obs.parameters()),
                 lr=args.lr)
 
+        if opt_level is not None:
+            model, optimizer = amp.initialize(
+                [self.policy, self.process_obs, self.critic, self.critic_target],
+                [self.policy_optim, self.critic_optim],
+                opt_level=opt_level)
+
     def select_action(self, obs, evaluate=False):
         with torch.no_grad():
             obs = torch.FloatTensor(obs).to(self.device).unsqueeze(0).to(self.dtype)
@@ -85,20 +92,22 @@ class SAC(object):
 
         self.critic_optim.zero_grad()
         assert torch.isfinite(qf_loss).all()
-        qf_loss.backward()
+        with amp.scale_loss(qf_loss, self.critic_optim) as qf_loss:
+            qf_loss.backward()
         self.critic_optim.step()
 
         state_batch = self.process_obs(obs_batch)
         pi, log_pi, _ = self.policy.sample(state_batch)
 
-        qf1_pi, qf2_pi = self.critic(state_batch, pi)
+        qf1_pi, qf2_pi = self.critic(state_batch.detach(), pi)
         min_qf_pi = torch.min(qf1_pi, qf2_pi)
 
         policy_loss = ((self.alpha * log_pi) - min_qf_pi).mean() # Jπ = 𝔼st∼D,εt∼N[α * logπ(f(εt;st)|st) − Q(st,f(εt;st))]
 
         self.policy_optim.zero_grad()
         assert torch.isfinite(policy_loss).all()
-        policy_loss.backward()
+        with amp.scale_loss(policy_loss, self.policy_optim) as policy_loss:
+            policy_loss.backward()
         self.policy_optim.step()
 
         if self.automatic_entropy_tuning:
