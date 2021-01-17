@@ -46,26 +46,26 @@ class GenerativeResnet3Headless(nn.Module):
         self.res4 = ResidualBlock(channel_size * 4, channel_size * 4)
 
 
-        self.conv4 = nn.ConvTranspose2d(channel_size * 4, channel_size * 2, kernel_size=4, stride=2, padding=1,
-                                        output_padding=1)
-        self.bn4 = nn.BatchNorm2d(channel_size * 2)
+        # self.conv4 = nn.ConvTranspose2d(channel_size * 4, channel_size * 2, kernel_size=4, stride=2, padding=1,
+        #                                 output_padding=1)
+        # self.bn4 = nn.BatchNorm2d(channel_size * 2)
 
-        self.conv5 = nn.ConvTranspose2d(channel_size * 2, channel_size, kernel_size=4, stride=2, padding=2,
-                                        output_padding=1)
-        self.bn5 = nn.BatchNorm2d(channel_size)
+        # self.conv5 = nn.ConvTranspose2d(channel_size * 2, channel_size, kernel_size=4, stride=2, padding=2,
+        #                                 output_padding=1)
+        # self.bn5 = nn.BatchNorm2d(channel_size)
 
-        self.conv6 = nn.ConvTranspose2d(channel_size, channel_size, kernel_size=9, stride=1, padding=4)
+        # self.conv6 = nn.ConvTranspose2d(channel_size, channel_size, kernel_size=9, stride=1, padding=4)
 
-        self.pos_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
-        self.cos_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
-        self.sin_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
-        self.width_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
+        # self.pos_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
+        # self.cos_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
+        # self.sin_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
+        # self.width_output = nn.Conv2d(in_channels=channel_size, out_channels=output_channels, kernel_size=2)
 
-        self.dropout = dropout
-        self.dropout_pos = nn.Dropout(p=prob)
-        self.dropout_cos = nn.Dropout(p=prob)
-        self.dropout_sin = nn.Dropout(p=prob)
-        self.dropout_wid = nn.Dropout(p=prob)
+        # self.dropout = dropout
+        # self.dropout_pos = nn.Dropout(p=prob)
+        # self.dropout_cos = nn.Dropout(p=prob)
+        # self.dropout_sin = nn.Dropout(p=prob)
+        # self.dropout_wid = nn.Dropout(p=prob)
 
         # freeze above params
         for param in self.parameters():
@@ -122,12 +122,12 @@ class ProcessObservation(nn.Module):
             os.path.dirname(os.path.abspath(__file__)),
             'data/nets/cornell-randsplit-rgbd-grconvnet3-drop1-ch16/epoch_30_iou_0.97.pt'
         )
-        self.feature_extractor = GenerativeResnet3Headless().eval()
-        self.feature_extractor.load_state_dict(state_dict=torch.load(grconvnet3_path))
+        self.feature_extractor = GenerativeResnet3Headless()#.half()
+        self.feature_extractor.load_state_dict(state_dict=torch.load(grconvnet3_path), strict=False)
 
         old_img_size = (res[0], res[1], 8)
         new_img_size = (res[0]//16-1, res[1]//16-1, 8)
-        self.reduce_action_space = int(np.prod(old_img_size) - np.prod(new_img_size))
+        self.reduce_obs_space = int(np.prod(old_img_size) - np.prod(new_img_size))
     
     def __call__(self, obs):
         """
@@ -135,7 +135,7 @@ class ProcessObservation(nn.Module):
 
         This assumes the observations ends in 2 rgbd images with shape (224, 244, 4)
         """
-        # import pdb; pdb.set_trace()
+        assert obs.shape[-1] > self.res[0] * self.res[1] * 8
         h, w = self.res
         px = h * w
         base_rgbd = obs[:, -px * 4:].reshape((-1, h, w, 4))

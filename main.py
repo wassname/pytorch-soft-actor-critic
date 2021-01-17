@@ -7,7 +7,6 @@ from pathlib import Path
 import logging
 import torch
 from sac import SAC
-from torch.utils.tensorboard import SummaryWriter
 from replay_memory import ReplayMemory
 from load_demonstrations import load_demonstrations
 import apple_gym.env
@@ -15,11 +14,25 @@ import pickle
 from process_obs import ProcessObservation
 # from torchinfo import summary
 from tqdm.auto import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 
 from loguru import logger
 from rich import print
 from rich.logging import RichHandler
+from rich.progress import (
+    ProgressColumn,
+    BarColumn,
+    DownloadColumn,
+    TextColumn,
+    TransferSpeedColumn,
+    TimeRemainingColumn,
+    Progress,
+    TaskID,
+    TimeElapsedColumn,
+    SpinnerColumn,
+    Text
+)
 logging.basicConfig(level=logging.INFO, handlers=[RichHandler(rich_tracebacks=True, markup=True)])
 logger.configure(handlers=[{"sink": RichHandler(markup=True),
                          "format": "{message}"}])
@@ -89,13 +102,15 @@ torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 
 # A visual network
-observation_space=env.observation_space.shape[0] 
+action_dim = env.action_space.shape[0]
+observation_dim=env.observation_space.shape[0] 
 process_obs=ProcessObservation()
-observation_space=observation_space - process_obs.reduce_action_space
-logger.info(f"process_obs reduces obs_space {env.observation_space.shape[0]}-{process_obs.reduce_action_space}={observation_space}")
+observation_dim=observation_dim - process_obs.reduce_obs_space
+
+logger.info(f"process_obs reduces obs_space {env.observation_space.shape[0]}-{process_obs.reduce_obs_space}={observation_dim}")
 
 # Agent
-agent = SAC(observation_space, env.action_space, args, process_obs)
+agent = SAC(observation_dim, env.action_space, args, process_obs)
 
 # TODO
 # summary(model, input_size=(batch_size, 1, 28, 28))
@@ -109,7 +124,7 @@ logger.info(f"log name {log_name}")
 save_dir=Path("models") / log_name
 
 # Memory
-memory=ReplayMemory(args.replay_size, args.seed)
+memory=ReplayMemory(args.replay_size, args.seed, env.observation_space.shape[0], action_dim)
 
 
 def save(save_dir):
@@ -141,7 +156,32 @@ if args.demonstrations:
 total_numsteps = 0
 updates = 0
 
-with tqdm(unit='steps', mininterval=5) as prog:
+class SpeedColumn(ProgressColumn):
+    """Renders human readable transfer speed."""
+
+    def render(self, task: "Task") -> Text:
+        """Show data transfer speed."""
+        speed = task.speed
+        if speed is None:
+            return Text("?", style="progress.data.speed")
+        return Text(f"{speed:2.2f} it/s", style="progress.data.speed")
+
+with Progress(
+    SpinnerColumn(),
+    "[progress.description]{task.description}",
+    BarColumn(),
+    TextColumn("{task.completed}/{task.total}"),
+    "[",
+    TimeElapsedColumn(),
+    "<",
+    TimeRemainingColumn(),
+    ',',
+    SpeedColumn(),
+    ']',
+    refresh_per_second=1, speed_estimate_period=360
+    ) as prog:
+    task1 = prog.add_task("[red]steps", total=args.num_steps)
+    task2 = prog.add_task("[red]updates", total=args.num_steps)
     for i_episode in itertools.count(0):
         print('1')
         episode_reward = 0
@@ -168,11 +208,12 @@ with tqdm(unit='steps', mininterval=5) as prog:
                     writer.add_scalar('entropy_temperature/alpha', alpha, updates)
 
                     updates += 1
+                    prog.update(task2, advance=1)
 
             next_state, reward, done, info = env.step(action)  # Step
             episode_steps += 1
             total_numsteps += 1
-            prog.update(1)
+            prog.update(task1, advance=1)
             episode_reward += reward
 
             # log env stuff

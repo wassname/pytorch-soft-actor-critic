@@ -1,5 +1,10 @@
 Modified for wassname's apple gym
 
+changes:
+- save
+- process_obs with grconvnet
+- logging
+
 make run
 make play
 
